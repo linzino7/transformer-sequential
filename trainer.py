@@ -11,6 +11,12 @@ import math
 import torch
 import torch.nn.functional as F
 
+a = 0 # right
+b = 0 # error
+
+c = 0
+d = 0
+
 
 def compute_masked_loss(args, out, Y, corpus, aux_loss):
     # merge batch dim and temporal dim
@@ -49,15 +55,78 @@ def compute_masked_loss(args, out, Y, corpus, aux_loss):
 
 
 def compute_total_loss(args, out, Y, corpus, aux_loss):
+    global a, b, c ,d
     if args.data_omit_label_idx is not None:
         return compute_masked_loss(args, out, Y, corpus, aux_loss)
 
+    #print('out size: ', out.size())
+    #print(out[0][0])
+    
+    num_candidates = 4
+    tmp = torch.argsort(out, dim=2)
+    #print('tmp:' ,tmp[0][0])
+    #print(tmp.size())
+    
+
+    # candidates method
+    flog2 = True 
+    for i in range(0,Y.size(0)):
+        for j in range(0, len(tmp[i])):
+            # if j == 0: print(Y[i][j])
+            # if j == 0: print(tmp[i][j][-num_candidates:])
+            if not Y[i][j] in tmp[i][j][-num_candidates:]:
+                flog2 = False
+                #print(Y[i][j])
+                #print(tmp[i][j][-num_candidates:])
+
+        if 7 in Y[i] and flog2:
+            c = c + 1
+        elif 7 in Y [i]:
+            d = d + 1
+
+
+
+    outputlabel = out.max(dim=2).indices # get pridice y
+    #print(outputlabel[0][0])
+
+
+    #print('===out===')
+    #print(out)
+    #print(out.size())
+    #print('out:', outputlabel)
+    #print('outmax:', outputlabel.size())
+    #print(outputlabel[0:256])
+    #print("===Y===")
+    #print('Y:', Y)
+    #print(Y.size())
+    #print(Y.size(0))
+    #raise
+
+    flog = True
+    for i in range(0,Y.size(0)):
+        #print('outputlabel[i]',outputlabel[i])
+        #print('Y[i]',Y[i])
+        if not outputlabel[i].equal(Y[i]):
+            flog = False
+    
+        if 7 in Y[i] and flog:
+            a = a + 1
+        elif 7 in Y [i]:
+            b = b + 1 
+    #if a > 20 :
+    #print("a ,b: ",a,b)
+    #raise
+    
+
+    
     # merge batch dim and temporal dim
     out = out.view(-1, out.size(-1))
     Y = Y.view(-1)
 
     # compute loss
     loss = F.nll_loss(out, Y)
+    
+    #print('loss:',loss)
 
     if torch.is_tensor(aux_loss):
         aux_loss = aux_loss.mean()
@@ -91,11 +160,14 @@ def train_batch(
         h_cache[i] = h_cache[i].detach()
 
     loss, aux_loss, err = compute_total_loss(args, out, Y, corpus, aux_loss)
+    
+    #print(args.data_omit_label_idx)
+    #raise # zino
 
     stat["loss"] = stat.get("loss", 0) + loss.item()
     if err >= 0:
         stat["err"] = stat.get("err", 0) + err.item()
-    if not test_only:
+    if not test_only:  
         loss = loss + aux_loss
         if hasattr(model.module, "layers"):
             for l in model.module.layers:
@@ -127,7 +199,7 @@ def train_batch(
                 if args.adapt_span:
                     l.attn.attn.adaptive_span.param_clamp()
 
-    return h_cache
+    return h_cache, loss # add loss
 
 
 def train(
@@ -141,6 +213,13 @@ def train(
     h_cache=None,
     corpus=None,
 ):
+    global a,b,c,d
+    a = 0
+    b = 0
+    c = 0
+    d = 0
+    #print('x size:', data.size())
+    
     labels = None
     if isinstance(data, tuple):
         data, labels = data
@@ -175,6 +254,7 @@ def train(
 
     nbatches = 0
     for batch_ind in range(nbatches_max):
+        
         offset = train_pos
         if pbar:
             pbar.update(args.mem_sz)
@@ -183,13 +263,15 @@ def train(
         update = nbatches % args.update_freq == 0
 
         X = data[:, offset : offset + args.mem_sz]
+        
         X = (
             X.to(args.device).contiguous().long()
             if args.lazy_load_data
             else X.contiguous().long()
         )
         if labels is None:
-            Y = data[:, offset + 1 : offset + args.mem_sz + 1]
+            #Y = data[:, offset + 1 : offset + args.mem_sz + 1]
+            Y = data[:, offset : offset + args.mem_sz]
         else:
             Y = labels[:, offset : offset + args.mem_sz]
         Y = (
@@ -197,7 +279,7 @@ def train(
             if args.lazy_load_data
             else Y.contiguous().long()
         )
-        h_cache = train_batch(
+        h_cache, loss = train_batch(
             args,
             model,
             optimizer,
@@ -210,7 +292,11 @@ def train(
             update,
             corpus,
         )
-
+        
+        #if batch_ind % 1000 ==0:
+        #    print('nbatch:', batch_ind)
+        #    print('loss:',loss)
+        
         if train_pos >= 0:
             train_pos += args.mem_sz
             if train_pos >= pos_max:
@@ -223,7 +309,13 @@ def train(
                     # randomize offset to reduce overfitting
                     train_pos = random.randrange(args.mem_sz)
                 h_cache = model.module.init_hid_cache(data.size(0))
-
+        #if nbatches >5: break
+    print('==result==')
+    print('a:',a)
+    print('b:',b)
+    print('c:',c)
+    print('d:',d)
+    
     if pbar:
         pbar.close()
     for k, v in stat.items():

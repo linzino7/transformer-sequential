@@ -221,6 +221,8 @@ def main(args):
     else:
         args.data_omit_label_idx = None
 
+    print(corpus.dictionary.idx2word)
+
     # create a model
     if args.feedback:
         model = feedback.FeedbackTransformer(args)
@@ -260,6 +262,7 @@ def main(args):
         scheduler = None
 
     model = distributed.wrap_model(args, model)
+    print(model)
 
     ep_init = checkpoint.load(args, model, optimizer, logger, scheduler)
 
@@ -274,6 +277,10 @@ def main(args):
         model.module.init_hid_cache(args.test_batch_sz),
         model.module.init_hid_cache(args.test_batch_sz),
     ]
+    
+    print('==pos==')
+    pos[0] = 0
+    print(pos)
 
     if args.full_test:
         # perform evaluation only
@@ -320,7 +327,7 @@ def main(args):
                 logger.print("test: {:.3f}ppl".format(math.exp(stat_test["loss"])))
             logger.print(f"gpu_mem: {gpu_mem:.1f}gb")
         return
-
+    print('==========train ==============')
     for ep in range(ep_init, args.nepochs):
         t_sta = time.time()
         args.ep = ep

@@ -31,6 +31,8 @@ from models import transformer_seq
 from models.utils import skew, pos_emb
 from modules import FeedForwardLayer
 
+a = 0
+b = 0
 
 def add_args(parser):
     parser.add_argument(
@@ -333,6 +335,28 @@ class ExpireSpan(transformer_seq.TransformerSeq):
         B = x.size(0)
         H = self.args.hid_sz
         h = self.in_emb(x)  # B x M x H
+        
+        #print('=expirespan==')
+        #print("x: ",x)
+        #c= 0
+        #for i in x:
+        #    print(i)
+        #    c = c +1 
+        #    if c>2: break
+        
+        #print("size: ",x.size())
+        #print("M: ", M)
+        #print("B: ", B)
+        #print("H= hid_sz:",H)
+        #print("h",h)
+        #print("targe:", target)
+        #print(target.size())
+        #c= 0
+        #for i in target:
+        #    print(i)
+        #    c = c +1
+        #    if c>2: break
+        #raise 
 
         c_prev = h_prev[-self.args.nlayers :]
         h_prev = h_prev[: -self.args.nlayers]
@@ -361,6 +385,12 @@ class ExpireSpan(transformer_seq.TransformerSeq):
                     h, h_cache[l], c_cache[l]
                 )  # B x M x H
                 aux_loss = aux_loss + loss
+            #print('==spens==')
+            #print('layer: ',l)
+            #print('span:',spans)
+            #for i in spans:
+            #    print(i)
+            #print('span size', spans.size())
             if self.get_layer(l).args.expire_span:
                 # Determine which memories can be dropped.
                 # Extend spans by the ramp length R because memories are still
@@ -411,9 +441,13 @@ class ExpireSpan(transformer_seq.TransformerSeq):
         if self.args.pre_norm:
             h = self.out_norm(h)
         out = self.out(h, target)
-
+        #print('====')
+        #print(out)
+        #print(out.size())
+        
         h_cache.extend(c_cache)
-
+        #print('------------------')
+        #raise
         return out, h_cache, aux_loss
 
     def init_hid_cache(self, batch_sz):

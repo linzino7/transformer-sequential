@@ -26,10 +26,12 @@ def batchify(data, bsz):
 class Dictionary(object):
     def __init__(self):
         self.UNK = "<unk>"
+        self.PAD = "<pad>"
         self.word2idx = {}
         self.word2count = {}
         self.idx2word = []
         self.add_word(self.UNK)
+        self.add_word(self.PAD)
 
     def add_word(self, word):
         if word not in self.word2count:
@@ -117,6 +119,9 @@ class Corpus(object):
         print("tokenizing " + path)
         """Tokenizes a text file."""
         assert os.path.exists(path)
+
+        windows_size = 8 # setting the windows size by zino
+        self.include_eos = True 
         # Tokenize file content
         with open(path, "r", encoding="utf8") as f:
             tokens = 0
@@ -124,17 +129,39 @@ class Corpus(object):
                 words = self._split_line(line)
                 if self.include_eos:
                     words += ["<eos>"]
-                tokens += len(words)
+                
+                if len(words) <windows_size: # make sure each data mach windows size
+                    for i in range(0, windows_size-len(words)):
+                        words += ["<pad>"]
+                    tokens += windows_size # add one time  
+                else:
+                    for roll in range(windows_size, len(words)+1):
+                        tokens += windows_size
+                    
         ids = torch.IntTensor(tokens)
         with open(path, "r", encoding="utf8") as f:
             token = 0
             for line in f:
+                que = []
                 words = self._split_line(line)
+                #print('===token',token)
+                #print(words)
                 if self.include_eos:
                     words += ["<eos>"]
-                for word in words:
+                
+                if len(words) < windows_size: 
+                    que = words.copy()
+                    for i in range(0, windows_size-len(words)):
+                        que += ["<pad>"]     
+                else:
+                    for roll in range(windows_size, len(words)+1):
+                        que += words[roll-windows_size:roll]
+
+                for word in que:
                     ids[token] = self.dictionary.getidx(word)
                     token += 1
+                
+                #print(que)
         return ids
 
 
@@ -166,6 +193,9 @@ def get_data(
     train_data = batchify(corpus.train, args.batch_sz)
     val_data = batchify(corpus.valid, args.test_batch_sz)
     test_data = batchify(corpus.test, args.test_batch_sz)
+    
+    print('corpus.train size', corpus.train.size())
+    print('train_data size', train_data.size())
 
     batch_sz_orig = args.batch_sz
     test_batch_sz_orig = args.test_batch_sz
